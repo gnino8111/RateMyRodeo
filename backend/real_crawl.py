@@ -62,27 +62,37 @@ async def main():
     
     # Initialize the crawler
     async with AsyncWebCrawler() as crawler:
-        # Process each post
-        for i, post in enumerate(posts, 1):
-            print(f"\n--- Processing post {i}/{len(posts)}: {post['title']} ---")
+        # Prepare single output file
+        filename = f"gmu_{prof.replace(' ', '_').lower()}_combined.md"
+        
+        with open(filename, "w", encoding="utf-8") as file:
+            file.write(f"# Comments about {prof} from r/gmu\n\n")
+            file.write(f"Generated from {len(posts)} search results\n\n")
             
-            # Crawl the post
-            markdown = await crawl_post(post['permalink'], crawler)
-            
-            if markdown:
-                # Save to file
-                filename = f"gmu_{prof.replace(' ', '_').lower()}_{i}.md"
-                with open(filename, "w", encoding="utf-8") as file:
-                    file.write(f"# {post['title']}\n\n")
+            # Process each post
+            for i, post in enumerate(posts, 1):
+                print(f"\n--- Processing post {i}/{len(posts)}: {post['title']} ---")
+                
+                # Crawl the post
+                markdown = await crawl_post(post['permalink'], crawler)
+                
+                if markdown:
+                    # Add separator and post title
+                    if i > 1:
+                        file.write("\n\n***\n\n")
+                    
+                    file.write(f"## Post: {post['title']}\n\n")
                     file.write(f"Source: {post['permalink']}\n\n")
                     file.write(markdown)
+                    
+                    print(f"Added content from post {i} to {filename}")
+                else:
+                    print(f"Could not generate markdown for post {i}")
                 
-                print(f"Saved markdown to: {filename}")
-            else:
-                print(f"Could not generate markdown for post {i}")
-            
-            # Be respectful to servers
-            await asyncio.sleep(1)
+                # Be respectful to servers
+                await asyncio.sleep(1)
+        
+        print(f"\nAll content combined and saved to: {filename}")
 
 # Run the async function
 if __name__ == "__main__":
