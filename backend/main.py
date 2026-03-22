@@ -898,7 +898,7 @@ async def chat(req: ChatRequest):
 
         config = types.GenerateContentConfig(
             temperature=0.7,
-            max_output_tokens=450,
+            max_output_tokens=800,
             system_instruction=system_instruction,
         )
 
