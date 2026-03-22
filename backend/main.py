@@ -888,10 +888,18 @@ async def chat(req: ChatRequest):
             for m in merged
         ]
 
+        _BREVITY = (
+            "You are a concise Western-themed college advisor. "
+            "Answer in 2-4 short sentences max. "
+            "Use plain language and one cowboy phrase at most. "
+            "Never use bullet lists or headers unless the user explicitly asks for them."
+        )
+        system_instruction = "\n\n".join([_BREVITY] + system_parts) if system_parts else _BREVITY
+
         config = types.GenerateContentConfig(
             temperature=0.7,
-            max_output_tokens=2048,
-            system_instruction="\n\n".join(system_parts) if system_parts else None,
+            max_output_tokens=450,
+            system_instruction=system_instruction,
         )
 
         resp = await _gemini_call_async(
