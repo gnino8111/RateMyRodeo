@@ -23,6 +23,7 @@ cssselect==1.4.0
 distro==1.9.0
 fake-useragent==2.2.0
 fastapi==0.135.1
+google-genai==1.68.0
 fastuuid==0.14.0
 filelock==3.25.2
 frozenlist==1.8.0
