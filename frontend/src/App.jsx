@@ -1,8 +1,5 @@
 import { useState, useRef, useEffect } from "react";
 
-// ─── GEMINI API KEY — loaded from environment variables ──────────
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-
 // ─── MOCK RESULT DATA ────────────────────────────────────────────
 const MOCK_RESULT = {
   workload_index: 7.4,
@@ -480,6 +477,8 @@ const styles = `
   .sum-key { font-family: 'Special Elite', cursive; font-size: 0.6rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
   .reddit-block { background: var(--surface2); border-left: 3px solid var(--gold); border-radius: 0 3px 3px 0; padding: 0.9rem 1.1rem; font-size: 0.85rem; color: var(--tan); line-height: 1.7; font-style: italic; font-family: 'Playfair Display', serif; }
 
+  .results-chatbot { max-width: 900px; margin: 0 auto; }
+
   @media (max-width: 640px) {
     .grid2, .input-row { grid-template-columns: 1fr; }
     .hero-score { flex-direction: column; gap: 1.5rem; }
@@ -491,10 +490,14 @@ const styles = `
 `;
 
 // ─── GEMINI CHAT FUNCTION ────────────────────────────────────────
-async function callGemini(history, userText) {
-  // Debug: Check if API key is loaded
+async function callGemini(history, userText, systemContext = null) {
   console.log("Calling backend for Gemini chat...");
-  
+
+  // Prepend system context as a hidden first message so Gemini has full course info
+  const historyToSend = systemContext
+    ? [{ role: "ai", text: `[CONTEXT FOR ADVISOR — do not repeat this verbatim to the user]: ${systemContext}` }, ...history]
+    : history;
+
   try {
     const res = await fetch(
       `http://localhost:8000/chat`,
@@ -502,7 +505,7 @@ async function callGemini(history, userText) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          history: history,
+          history: historyToSend,
           user_text: userText
         }),
       }
@@ -523,12 +526,12 @@ async function callGemini(history, userText) {
 }
 
 // ─── CHATBOT COMPONENT ───────────────────────────────────────────
-function ChatBot() {
+function ChatBot({
+  context = null,
+  initialGreeting = "Howdy, partner! I'm the RateMyRodeo advisor. Ask me anything about UVA courses — difficulty, workload, grade trails, or what fits your busy schedule. What're you wranglin' with today?",
+}) {
   const [messages, setMessages] = useState([
-    {
-      role: "ai",
-      text: "Howdy, partner! I'm the RateMyRodeo advisor. Ask me anything about UVA courses — difficulty, workload, grade trails, or what fits your busy schedule. What're you wranglin' with today?",
-    },
+    { role: "ai", text: initialGreeting },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -548,7 +551,7 @@ function ChatBot() {
     setLoading(true);
 
     try {
-      const reply = await callGemini(messages, userText);
+      const reply = await callGemini(messages, userText, context);
       setMessages((prev) => [...prev, { role: "ai", text: reply }]);
     } catch (err) {
       setMessages((prev) => [
@@ -744,6 +747,22 @@ function Upload({ onAnalyze }) {
 function Results({ data, professor, course, onBack }) {
   const score = data.workload_index;
   const label = score >= 8 ? "Grueling Cattle Drive" : score >= 6 ? "Rough Trail" : score >= 4 ? "Moderate Ride" : "Easy Pasture";
+
+  const advisorContext = [
+    `You are a friendly college course advisor for UVA students, speaking in a Western/cowboy style. You have the following analysis for the student's course:`,
+    `Course: ${course || "Unknown Course"}`,
+    `Professor: ${data.professor.name} (${data.professor.department})`,
+    `RateMyProfessor — Rating: ${data.professor.rating}/5, Difficulty: ${data.professor.difficulty}/5, Would Take Again: ${data.professor.would_take_again}% (${data.professor.num_ratings} ratings)`,
+    `Workload Index: ${score}/10 (${label})`,
+    `Breakdown — Syllabus: ${data.breakdown.syllabus}, Professor: ${data.breakdown.professor}, Grades: ${data.breakdown.grades}, Reddit: ${data.breakdown.reddit}`,
+    `Red Flags: ${data.red_flags.join("; ")}`,
+    `Grade Distribution: A:${data.grade_distribution.A}%, B:${data.grade_distribution.B}%, C:${data.grade_distribution.C}%, D:${data.grade_distribution.D}%, F:${data.grade_distribution.F}%`,
+    `Syllabus: ${data.syllabus_summary.num_assignments} assignments, ${data.syllabus_summary.num_exams} exams, ${data.syllabus_summary.weekly_reading_hours}h/week reading, Late Policy: ${data.syllabus_summary.late_policy_strict ? "Strict" : "Flexible"}, Attendance: ${data.syllabus_summary.attendance_mandatory ? "Required" : "Optional"}, Group Project: ${data.syllabus_summary.has_group_project ? "Yes" : "No"}`,
+    `Reddit Summary: ${data.reddit_summary}`,
+    `Use this data to answer the student's follow-up questions naturally and helpfully.`,
+  ].join("\n");
+
+  const advisorGreeting = `Howdy! I've got the full roundup on ${course || "this course"} with Sheriff ${professor}. The workload clocks in at ${score}/10 — a ${label}. Ask me anything: is it doable with a part-time job? What to watch out for? I'm all ears, partner.`;
   const desc = score >= 8
     ? "This here trail is brutal, partner. Don't rope yourself into more courses without extra provisions."
     : score >= 6
@@ -826,6 +845,11 @@ function Results({ data, professor, course, onBack }) {
           <div className="sum-item"><span className="sum-val" style={{color: data.syllabus_summary.has_group_project ? "#c9912a" : "#7dc46f"}}>{data.syllabus_summary.has_group_project ? "Yep" : "Nope"}</span><span className="sum-key">Group Project</span></div>
         </div>
         <div className="reddit-block">"{data.reddit_summary}"</div>
+      </div>
+
+      <div className="rope-divider">Ask the Frontier Advisor</div>
+      <div className="results-chatbot">
+        <ChatBot context={advisorContext} initialGreeting={advisorGreeting} />
       </div>
     </div>
   );

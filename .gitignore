@@ -1,2 +1,11 @@
 # Scraped RMP output files
 backend/rmp_*.md
+
+# Environment variables (contains API keys — never commit)
+.env
+**/.env
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.pyc
