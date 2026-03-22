@@ -528,7 +528,7 @@ async function callGemini(history, userText, systemContext = null) {
 // ─── CHATBOT COMPONENT ───────────────────────────────────────────
 function ChatBot({
   context = null,
-  initialGreeting = "Howdy, partner! I'm the RateMyRodeo advisor. Ask me anything about UVA courses — difficulty, workload, grade trails, or what fits your busy schedule. What're you wranglin' with today?",
+  initialGreeting = "Howdy, partner! I'm the RateMyRodeo advisor. Ask me anything about your professor or courses — difficulty, workload, grade trails, or what fits your busy schedule. What're you wranglin' with today?",
 }) {
   const [messages, setMessages] = useState([
     { role: "ai", text: initialGreeting },
@@ -565,7 +565,7 @@ function ChatBot({
 
   return (
     <div className="chatbot-section">
-      <div className="chatbot-label">🤠 Frontier Advisor — Ask anything about UVA courses</div>
+      <div className="chatbot-label">🤠 Frontier Advisor — Ask anything about your courses</div>
       <div className="chat-window">
         <div className="chat-messages">
           {messages.map((m, i) => (
@@ -749,7 +749,7 @@ function Results({ data, professor, course, onBack }) {
   const label = score >= 8 ? "Grueling Cattle Drive" : score >= 6 ? "Rough Trail" : score >= 4 ? "Moderate Ride" : "Easy Pasture";
 
   const advisorContext = [
-    `You are a friendly college course advisor for UVA students, speaking in a Western/cowboy style. You have the following analysis for the student's course:`,
+    `You are a friendly college course advisor for students, speaking in a Western/cowboy style. You have the following analysis for the student's course:`,
     `Course: ${course || "Unknown Course"}`,
     `Professor: ${data.professor.name} (${data.professor.department})`,
     `RateMyProfessor — Rating: ${data.professor.rating}/5, Difficulty: ${data.professor.difficulty}/5, Would Take Again: ${data.professor.would_take_again}% (${data.professor.num_ratings} ratings)`,
@@ -777,7 +777,7 @@ function Results({ data, professor, course, onBack }) {
     <div className="results-wrap">
       <button className="back-btn" onClick={onBack}>← Ride Back</button>
       <h2 className="results-title">{course || "Course Roundup"}</h2>
-      <p className="results-sub">Sheriff {professor} · University of Virginia Frontier</p>
+      <p className="results-sub">{professor} · Course Analysis</p>
 
       <div className="hero-score">
         <div className="score-ring" style={{ "--pct": score * 10 }}>

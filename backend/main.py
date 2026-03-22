@@ -3,7 +3,7 @@ RateMyRodeo — FastAPI backend
 Endpoints: POST /analyze  POST /chat
 
 Required environment variables (put in backend/.env):
-  GEMINI_API_KEY      — for all AI calls (syllabus parsing, chat, Reddit summary)
+  GEMINI_API_KEY  — picked up automatically by the google-genai client
 """
 
 import os
@@ -16,16 +16,20 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import litellm
+from google import genai
+from google.genai import types
 
 # ── Setup ──────────────────────────────────────────────────────────────────────
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 sys.path.insert(0, os.path.dirname(__file__))
 
-litellm.set_verbose = False  # suppress noisy litellm logs
+# google-genai client — reads GEMINI_API_KEY from environment automatically
+client = genai.Client()
 
-from rmp_scraper import search_professor, search_school, get_ratings  # noqa: E402
+MODEL = "gemini-3-flash-preview"
+
+from rmp_scraper import search_professor, get_ratings  # noqa: E402
 
 app = FastAPI(title="RateMyRodeo API")
 
@@ -100,7 +104,7 @@ def _strip_json_fences(text: str) -> str:
 
 def fetch_rmp_data(professor_name: str) -> dict:
     """
-    Look up the professor on RateMyProfessors (scoped to UVA).
+    Look up the professor on RateMyProfessors (global search, any school).
     Always returns a dict with the expected keys — never raises.
     """
     fallback = {
@@ -114,10 +118,8 @@ def fetch_rmp_data(professor_name: str) -> dict:
         "raw_ratings": [],
     }
     try:
-        school = search_school("University of Virginia")
-        school_id = school["id"] if school else None
-
-        professor = search_professor(professor_name, school_id)
+        # Search globally — no school filter so any university's professors are found
+        professor = search_professor(professor_name, school_id=None)
         if not professor:
             print(f"[RMP] No match found for {professor_name!r}")
             return fallback
@@ -141,16 +143,16 @@ def fetch_rmp_data(professor_name: str) -> dict:
 
 # ── Reddit search ──────────────────────────────────────────────────────────────
 
-def fetch_reddit_posts(professor_name: str, subreddit: str = "uva", limit: int = 8) -> list[dict]:
+def fetch_reddit_posts(professor_name: str, limit: int = 8) -> list[dict]:
     """
-    Search r/uva for posts mentioning the professor.
+    Search all of Reddit for posts mentioning the professor.
     Returns [] on any failure so the rest of the pipeline continues.
     """
     try:
         url = (
-            f"https://www.reddit.com/r/{subreddit}/search.json"
-            f"?q={requests.utils.quote(professor_name)}"
-            f"&type=link&sort=new&limit={limit}&restrict_sr=1"
+            f"https://www.reddit.com/search.json"
+            f"?q={requests.utils.quote(professor_name + ' professor')}"
+            f"&type=link&sort=relevance&limit={limit}"
         )
         headers = {"User-Agent": "RateMyRodeo/1.0 (academic research project)"}
         resp = requests.get(url, headers=headers, timeout=10)
@@ -169,7 +171,7 @@ def fetch_reddit_posts(professor_name: str, subreddit: str = "uva", limit: int =
         return []
 
 
-# ── Claude: syllabus parsing ───────────────────────────────────────────────────
+# ── Gemini: syllabus parsing ───────────────────────────────────────────────────
 
 _SYLLABUS_FALLBACK = {
     "num_assignments": 5,
@@ -199,13 +201,13 @@ Return exactly this JSON shape:
   "late_policy_strict": <boolean, true if no late work or heavy penalty>,
   "attendance_mandatory": <boolean>,
   "red_flags": [<up to 5 short strings of notable student concerns>],
-  "workload_score": <float 1.0–10.0, overall difficulty estimate>
+  "workload_score": <float 1.0-10.0, overall difficulty estimate>
 }}
 """
 
 
 def parse_syllabus(syllabus_text: str, course_code: str) -> dict:
-    """Use Claude to extract structured data from the syllabus. Falls back gracefully."""
+    """Use Gemini to extract structured data from the syllabus. Falls back gracefully."""
     if not syllabus_text.strip():
         return dict(_SYLLABUS_FALLBACK)
 
@@ -214,14 +216,16 @@ def parse_syllabus(syllabus_text: str, course_code: str) -> dict:
         syllabus_text=syllabus_text[:3500],
     )
     try:
-        resp = litellm.completion(
-            model="gemini/gemini-1.5-flash",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=450,
-            temperature=0.0,
-            response_format={"type": "json_object"},
+        resp = client.models.generate_content(
+            model=MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.0,
+                max_output_tokens=450,
+            ),
         )
-        raw = _strip_json_fences(resp.choices[0].message.content.strip())
+        raw = _strip_json_fences(resp.text.strip())
         result = json.loads(raw)
 
         # Clamp and type-coerce every field so the response is always valid
@@ -236,7 +240,7 @@ def parse_syllabus(syllabus_text: str, course_code: str) -> dict:
             "workload_score": round(max(1.0, min(10.0, _float(result.get("workload_score"), 5.0))), 1),
         }
     except Exception as exc:
-        print(f"[Claude] Syllabus parse error: {exc}")
+        print(f"[Gemini/Syllabus] Error: {exc}")
         return dict(_SYLLABUS_FALLBACK)
 
 
@@ -245,31 +249,30 @@ def parse_syllabus(syllabus_text: str, course_code: str) -> dict:
 def summarize_reddit(posts: list[dict], professor_name: str) -> str:
     """Summarize Reddit posts with Gemini. Returns a plain string, never raises."""
     if not posts:
-        return f"No Reddit discussions found for {professor_name} on r/uva."
+        return f"No Reddit discussions found for {professor_name}."
     try:
         combined = "\n\n".join(
             f"[{p['score']} upvotes] {p['title']}\n{p['selftext']}"
             for p in posts[:5]
         )
-        resp = litellm.completion(
-            model="gemini/gemini-1.5-flash",
-            messages=[{
-                "role": "user",
-                "content": (
-                    f"Summarize what UVA students say about Professor {professor_name} "
-                    f"based on these Reddit posts. Write 2-3 sentences. "
-                    f"Focus on workload, difficulty, and overall experience.\n\n{combined}"
-                ),
-            }],
-            max_tokens=220,
-            temperature=0.3,
+        resp = client.models.generate_content(
+            model=MODEL,
+            contents=(
+                f"Summarize what students say about Professor {professor_name} "
+                f"based on these Reddit posts. Write 2-3 sentences. "
+                f"Focus on workload, difficulty, and overall experience.\n\n{combined}"
+            ),
+            config=types.GenerateContentConfig(
+                temperature=0.3,
+                max_output_tokens=220,
+            ),
         )
-        return resp.choices[0].message.content.strip()
+        return resp.text.strip()
     except Exception as exc:
         print(f"[Gemini/Reddit] Error: {exc}")
         return (
-            f"Students discuss {professor_name} on r/uva — "
-            "search Reddit for detailed experiences."
+            f"Reddit discussions mention {professor_name} — "
+            "search Reddit for detailed student experiences."
         )
 
 
@@ -304,11 +307,11 @@ def compute_workload(
     grade_dist: dict,
 ) -> dict:
     """
-    Weighted workload index (0–10) and per-dimension breakdown.
-      Syllabus  35 % — from Claude parse
-      Professor 30 % — from RMP difficulty (0–5 → 0–10)
-      Grades    20 % — inverse of A% (lower A% = harder)
-      Reddit    15 % — inverse of RMP rating (proxy for sentiment)
+    Weighted workload index (0-10) and per-dimension breakdown.
+      Syllabus  35% — from Gemini syllabus parse
+      Professor 30% — from RMP difficulty (0-5 -> 0-10)
+      Grades    20% — inverse of A% (lower A% = harder)
+      Reddit    15% — inverse of RMP rating (proxy for sentiment)
     """
     s = max(0.0, min(10.0, float(syllabus_score)))
     p = max(0.0, min(10.0, float(prof_difficulty) * 2.0))
@@ -334,8 +337,8 @@ def compute_workload(
 @app.post("/analyze")
 async def analyze(req: AnalyzeRequest):
     """
-    Full pipeline: RMP + Reddit (parallel) → Claude syllabus + Gemini summary (parallel)
-    → workload score → structured JSON matching App.jsx's MOCK_RESULT shape.
+    Full pipeline: RMP + Reddit (parallel) -> Gemini syllabus + Reddit summary (parallel)
+    -> workload score -> structured JSON matching App.jsx's MOCK_RESULT shape.
     """
     try:
         # Phase 1: network fetches in parallel
@@ -397,10 +400,10 @@ _CONTEXT_PREFIX = "[CONTEXT FOR ADVISOR"
 @app.post("/chat")
 async def chat(req: ChatRequest):
     """
-    Gemini chat endpoint.
+    Gemini chat endpoint using google-genai.
     Handles:
-      - Frontend "ai"/"user" roles → litellm "assistant"/"user"
-      - Context messages extracted to system prompt
+      - Frontend "ai"/"user" roles -> google-genai "model"/"user"
+      - Context messages extracted to system_instruction
       - Consecutive same-role messages merged (Gemini requires alternating turns)
       - Ensures first conversation turn is always "user"
     """
@@ -410,10 +413,10 @@ async def chat(req: ChatRequest):
 
         for msg in req.history:
             if msg.text.startswith(_CONTEXT_PREFIX):
-                # Pull advisor context out as a system message
                 system_parts.append(msg.text)
             else:
-                role = "assistant" if msg.role == "ai" else "user"
+                # google-genai uses "model" for AI, "user" for human
+                role = "model" if msg.role == "ai" else "user"
                 chat_history.append({"role": role, "content": msg.text})
 
         # Merge consecutive same-role messages — Gemini requires strict alternation
@@ -425,26 +428,35 @@ async def chat(req: ChatRequest):
                 merged.append({"role": m["role"], "content": m["content"]})
 
         # Gemini requires the first turn to be "user"
-        if merged and merged[0]["role"] == "assistant":
+        if merged and merged[0]["role"] == "model":
             merged.insert(0, {"role": "user", "content": "Hello."})
 
         # Append the new user message
         merged.append({"role": "user", "content": req.user_text})
 
-        # Build final message list (system first, then conversation)
-        messages: list[dict] = []
-        if system_parts:
-            messages.append({"role": "system", "content": "\n\n".join(system_parts)})
-        messages.extend(merged)
+        # Build Contents list for google-genai
+        contents = [
+            types.Content(
+                role=m["role"],
+                parts=[types.Part(text=m["content"])],
+            )
+            for m in merged
+        ]
 
-        resp = await asyncio.to_thread(
-            litellm.completion,
-            model="gemini/gemini-1.5-flash",
-            messages=messages,
-            max_tokens=600,
+        # Build config — attach system instruction if context was provided
+        config = types.GenerateContentConfig(
             temperature=0.7,
+            max_output_tokens=600,
         )
-        return {"response": resp.choices[0].message.content.strip()}
+        if system_parts:
+            config.system_instruction = "\n\n".join(system_parts)
+
+        resp = await client.aio.models.generate_content(
+            model=MODEL,
+            contents=contents,
+            config=config,
+        )
+        return {"response": resp.text.strip()}
 
     except Exception as exc:
         print(f"[/chat] Error: {exc}", flush=True)
