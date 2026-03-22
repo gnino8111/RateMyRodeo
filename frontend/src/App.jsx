@@ -522,6 +522,57 @@ const styles = `
   .compare-grade-bar { width: 100%; border-radius: 2px 2px 0 0; }
   .compare-grade-letter { font-family: 'Rye', cursive; font-size: 0.6rem; color: var(--muted); }
 
+  /* ── PROFILE BANNER ── */
+  .profile-banner {
+    width: 100%; max-width: 760px;
+    background: var(--surface); border: 2px solid var(--border);
+    border-radius: 3px; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem;
+    box-shadow: 4px 4px 0 #000;
+  }
+  .profile-banner-label {
+    font-family: 'Rye', cursive; font-size: 0.7rem; color: var(--gold);
+    text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 0.5rem; display: block;
+  }
+  .profile-banner-sub {
+    font-family: 'Playfair Display', serif; font-style: italic;
+    color: var(--muted); font-size: 0.82rem; margin-bottom: 0.85rem;
+  }
+  .profile-banner-row { display: flex; gap: 0.65rem; align-items: center; }
+  .profile-banner-row input[type="text"] { flex: 1; }
+  .profile-skip {
+    background: transparent; border: none; color: var(--muted);
+    font-family: 'Special Elite', cursive; font-size: 0.72rem;
+    cursor: pointer; padding: 0.4rem 0.5rem; text-decoration: underline;
+    flex-shrink: 0;
+  }
+  .profile-skip:hover { color: var(--tan); }
+
+  /* ── SCHOOL BADGE (nav) ── */
+  .school-badge {
+    font-family: 'Special Elite', cursive; font-size: 0.75rem;
+    color: var(--gold); border: 1px solid var(--border);
+    padding: 0.35rem 0.8rem; border-radius: 2px; cursor: pointer;
+    transition: all 0.2s; background: var(--surface2);
+    display: flex; align-items: center; gap: 0.4rem;
+  }
+  .school-badge:hover { border-color: var(--gold); background: rgba(201,145,42,0.1); }
+  .school-badge-input {
+    background: transparent; border: none; outline: none;
+    color: var(--gold); font-family: 'Special Elite', cursive;
+    font-size: 0.75rem; width: 170px;
+  }
+
+  /* ── TYPING CURSOR ── */
+  .typing-cursor {
+    display: inline-block;
+    width: 2px; height: 1em;
+    background: var(--gold);
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: blink-cursor 0.75s step-end infinite;
+  }
+  @keyframes blink-cursor { 0%,100%{opacity:1} 50%{opacity:0} }
+
   @media (max-width: 640px) {
     .grid2, .input-row, .compare-grid { grid-template-columns: 1fr; }
     .hero-score { flex-direction: column; gap: 1.5rem; }
@@ -571,8 +622,11 @@ async function callGemini(history, userText, systemContext = null) {
 // ─── CHATBOT COMPONENT ───────────────────────────────────────────
 function ChatBot({
   context = null,
+  profileContext = null,
   initialGreeting = "Howdy, partner! I'm the RateMyRodeo advisor. Ask me anything about your professor or courses — difficulty, workload, grade trails, or what fits your busy schedule. What're you wranglin' with today?",
 }) {
+  const fullContext = [profileContext, context].filter(Boolean).join("\n\n") || null;
+
   const [messages, setMessages] = useState([
     { role: "ai", text: initialGreeting },
   ]);
@@ -594,7 +648,7 @@ function ChatBot({
     setLoading(true);
 
     try {
-      const reply = await callGemini(messages, userText, context);
+      const reply = await callGemini(messages, userText, fullContext);
       setMessages((prev) => [...prev, { role: "ai", text: reply }]);
     } catch (err) {
       setMessages((prev) => [
@@ -656,8 +710,88 @@ function ChatBot({
   );
 }
 
+// ─── PROFILE HELPERS ─────────────────────────────────────────────
+const PROFILE_KEY = "rmr_profile";
+const defaultProfile = () => ({ school: "", history: [], prompted: false });
+
+function loadProfile() {
+  try { return JSON.parse(localStorage.getItem(PROFILE_KEY)) || defaultProfile(); }
+  catch { return defaultProfile(); }
+}
+
+function buildProfileContext(profile) {
+  const parts = [];
+  if (profile.school) parts.push(`The student attends ${profile.school}.`);
+  if (profile.history.length > 0) {
+    const recent = profile.history
+      .slice(0, 5)
+      .map((h) => `${h.course} with ${h.professor} (workload ${h.workload}/10)`);
+    parts.push(`Previously analyzed: ${recent.join("; ")}.`);
+  }
+  if (parts.length > 0) parts.push("Use this context to give personalized advice.");
+  return parts.length > 0 ? parts.join(" ") : null;
+}
+
+// ─── PROFILE SETUP BANNER ────────────────────────────────────────
+function ProfileSetup({ onSave, onSkip }) {
+  const [school, setSchool] = useState("");
+  return (
+    <div className="profile-banner">
+      <span className="profile-banner-label">🏫 What's your stomping ground?</span>
+      <p className="profile-banner-sub">
+        Tell us your school so we can tailor advice and point you to the right subreddit.
+      </p>
+      <div className="profile-banner-row">
+        <input
+          type="text"
+          placeholder="e.g. George Mason University"
+          value={school}
+          onChange={(e) => setSchool(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && school.trim() && onSave(school.trim())}
+        />
+        <button
+          className="btn-primary"
+          style={{ padding: "0.6rem 1.1rem", fontSize: "0.78rem", flexShrink: 0 }}
+          onClick={() => school.trim() && onSave(school.trim())}
+        >
+          Save
+        </button>
+        <button className="profile-skip" onClick={onSkip}>Skip</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── TYPING TEXT ─────────────────────────────────────────────────
+function TypingText({ text, speed = 28, className = "" }) {
+  const [displayed, setDisplayed] = useState("");
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    setDisplayed("");
+    setDone(false);
+    let i = 0;
+    const id = setInterval(() => {
+      i++;
+      setDisplayed(text.slice(0, i));
+      if (i >= text.length) {
+        clearInterval(id);
+        setDone(true);
+      }
+    }, speed);
+    return () => clearInterval(id);
+  }, [text, speed]);
+
+  return (
+    <span className={className}>
+      {displayed}
+      {!done && <span className="typing-cursor" />}
+    </span>
+  );
+}
+
 // ─── LANDING PAGE ────────────────────────────────────────────────
-function Landing({ onStart }) {
+function Landing({ onStart, profile, onSaveSchool }) {
   return (
     <div className="landing">
       <div className="hero">
@@ -668,7 +802,7 @@ function Landing({ onStart }) {
           </div>
         </div>
         <p className="hero-sub">
-          Don't ride blind into a hard trail, partner. Upload your syllabus and get a full 360° roundup — workload score, professor rep, grade trails, and red flags — all in one saloon.
+          <TypingText text="Don't ride blind into a hard trail, partner. Upload your syllabus and get a full 360° roundup — workload score, professor rep, grade trails, and red flags — all in one saloon." />
         </p>
         <div className="hero-btns">
           <button className="btn-primary" onClick={onStart}>⚑ Analyze a Syllabus</button>
@@ -678,9 +812,16 @@ function Landing({ onStart }) {
         </div>
       </div>
 
+      {!profile.prompted && (
+        <ProfileSetup
+          onSave={(school) => onSaveSchool(school, true)}
+          onSkip={() => onSaveSchool("", true)}
+        />
+      )}
+
       <div className="rope-divider">The Telegraph Office</div>
 
-      <ChatBot />
+      <ChatBot profileContext={buildProfileContext(profile)} />
 
       <div className="stats-strip">
         <div className="stat"><span className="stat-num">4</span><span className="stat-label">Data Sources</span></div>
@@ -786,7 +927,7 @@ function Upload({ onAnalyze }) {
 }
 
 // ─── RESULTS PAGE ────────────────────────────────────────────────
-function Results({ data, professor, course, hasSyllabus, onBack }) {
+function Results({ data, professor, course, hasSyllabus, profile, onBack }) {
   const score = data.workload_index;
   const label = score >= 8 ? "Grueling Cattle Drive" : score >= 6 ? "Rough Trail" : score >= 4 ? "Moderate Ride" : "Easy Pasture";
 
@@ -942,7 +1083,7 @@ function Results({ data, professor, course, hasSyllabus, onBack }) {
 
       <div className="rope-divider">Ask the Frontier Advisor</div>
       <div className="results-chatbot">
-        <ChatBot context={advisorContext} initialGreeting={advisorGreeting} />
+        <ChatBot context={advisorContext} profileContext={buildProfileContext(profile)} initialGreeting={advisorGreeting} />
       </div>
     </div>
   );
@@ -1128,6 +1269,37 @@ export default function App() {
   const [page, setPage] = useState("landing");
   const [formData, setFormData] = useState(null);
   const [compareData, setCompareData] = useState(null);
+  const [profile, setProfile] = useState(loadProfile);
+  const [editingSchool, setEditingSchool] = useState(false);
+  const schoolInputRef = useRef(null);
+
+  // Persist profile to localStorage on every change
+  useEffect(() => {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  }, [profile]);
+
+  // Focus school input when editing starts
+  useEffect(() => {
+    if (editingSchool) schoolInputRef.current?.focus();
+  }, [editingSchool]);
+
+  const saveSchool = (school, prompted = true) => {
+    setProfile((prev) => ({ ...prev, school, prompted }));
+  };
+
+  const logHistory = (d) => {
+    const entry = {
+      course: d.course || "Unknown Course",
+      professor: d.professor,
+      workload: d.result.workload_index,
+    };
+    setProfile((prev) => {
+      const filtered = prev.history.filter(
+        (h) => !(h.course === entry.course && h.professor === entry.professor)
+      );
+      return { ...prev, history: [entry, ...filtered].slice(0, 10) };
+    });
+  };
 
   return (
     <>
@@ -1135,7 +1307,28 @@ export default function App() {
       <div className="app">
         <nav className="nav">
           <div className="logo" onClick={() => setPage("landing")}>⭐ RateMyRodeo</div>
-          <div style={{ display: "flex", gap: "0.6rem" }}>
+          <div style={{ display: "flex", gap: "0.6rem", alignItems: "center" }}>
+            {/* School badge — click to edit inline */}
+            {editingSchool ? (
+              <div className="school-badge">
+                📍
+                <input
+                  ref={schoolInputRef}
+                  className="school-badge-input"
+                  defaultValue={profile.school}
+                  placeholder="Your school..."
+                  onBlur={(e) => { saveSchool(e.target.value.trim(), true); setEditingSchool(false); }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { saveSchool(e.target.value.trim(), true); setEditingSchool(false); }
+                    if (e.key === "Escape") setEditingSchool(false);
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="school-badge" onClick={() => setEditingSchool(true)} title="Click to set your school">
+                📍 {profile.school || "Set your school"}
+              </div>
+            )}
             {page !== "upload" && (
               <button className="nav-btn" onClick={() => setPage("upload")}>Scout a Course</button>
             )}
@@ -1144,14 +1337,23 @@ export default function App() {
             )}
           </div>
         </nav>
-        {page === "landing"       && <Landing onStart={() => setPage("upload")} />}
-        {page === "upload"        && <Upload onAnalyze={(d) => { setFormData(d); setPage("results"); }} />}
-        {page === "results"       && (
+        {page === "landing" && (
+          <Landing
+            onStart={() => setPage("upload")}
+            profile={profile}
+            onSaveSchool={saveSchool}
+          />
+        )}
+        {page === "upload" && (
+          <Upload onAnalyze={(d) => { logHistory(d); setFormData(d); setPage("results"); }} />
+        )}
+        {page === "results" && (
           <Results
             data={formData?.result || MOCK_RESULT}
             professor={formData?.professor}
             course={formData?.course}
             hasSyllabus={formData?.hasSyllabus ?? true}
+            profile={profile}
             onBack={() => setPage("upload")}
           />
         )}
