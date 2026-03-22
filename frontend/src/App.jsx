@@ -441,12 +441,63 @@ const styles = `
   .pill-red { background: rgba(139,32,32,0.2); color: #e05050; border: 1px solid rgba(139,32,32,0.5); }
   .pill-green { background: rgba(74,124,63,0.2); color: #7dc46f; border: 1px solid rgba(74,124,63,0.5); }
   .score-desc { color: var(--tan); font-size: 0.87rem; line-height: 1.65; margin-bottom: 1.1rem; font-family: 'Playfair Display', serif; font-style: italic; }
-  .bar-rows { display: flex; flex-direction: column; gap: 0.55rem; }
+  /* ── RACETRACK BARS ── */
+  .bar-rows { display: flex; flex-direction: column; gap: 0.6rem; }
   .bar-row { display: flex; align-items: center; gap: 0.75rem; }
   .bar-name { font-family: 'Special Elite', cursive; font-size: 0.68rem; color: var(--muted); width: 75px; text-transform: uppercase; }
-  .bar-track { flex: 1; height: 6px; background: var(--surface2); border-radius: 1px; overflow: hidden; border: 1px solid var(--border); }
-  .bar-fill { height: 100%; border-radius: 1px; }
-  .bar-val { font-family: 'Special Elite', cursive; font-size: 0.72rem; color: var(--cream); width: 28px; text-align: right; }
+  .bar-val { font-family: 'Rye', cursive; font-size: 0.78rem; color: var(--cream); width: 32px; text-align: right; }
+
+  .race-track {
+    flex: 1; height: 20px; position: relative;
+    background: #110a02;
+    border: 1px solid var(--border); border-radius: 2px;
+    overflow: hidden;
+  }
+  /* dirt texture */
+  .race-track::before {
+    content: '';
+    position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      repeating-linear-gradient(180deg,
+        transparent 0px, transparent 4px,
+        rgba(92,61,26,0.18) 4px, rgba(92,61,26,0.18) 5px
+      );
+  }
+  /* starting gate line */
+  .race-gate {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    width: 3px; z-index: 3;
+    background: repeating-linear-gradient(180deg,
+      var(--gold) 0px, var(--gold) 3px,
+      #000 3px, #000 6px
+    );
+  }
+  /* checkered finish line */
+  .race-finish {
+    position: absolute; right: 0; top: 0; bottom: 0;
+    width: 6px; z-index: 3;
+    background: repeating-linear-gradient(180deg,
+      #fff 0px, #fff 5px,
+      #000 5px, #000 10px
+    );
+    opacity: 0.55;
+  }
+  .race-fill {
+    height: 100%; position: relative; z-index: 1;
+    border-radius: 0 2px 2px 0;
+    transition: width 2.8s cubic-bezier(0.22, 1.2, 0.36, 1.0);
+  }
+  .race-horse {
+    position: absolute; right: 3px; top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.95rem; line-height: 1;
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.9));
+    pointer-events: none;
+  }
+  .race-winner-flag {
+    font-family: 'Rye', cursive; font-size: 0.6rem;
+    color: var(--gold2); margin-left: 3px; vertical-align: middle;
+  }
 
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.25rem; }
   .info-card { background: var(--surface); border: 2px solid var(--border); border-radius: 3px; padding: 1.5rem; box-shadow: 3px 3px 0 #000; }
@@ -634,14 +685,17 @@ function ChatBot({
   const [loading, setLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const bottomRef = useRef(null);
+  const hasInteracted = useRef(false);
 
   useEffect(() => {
+    if (!hasInteracted.current) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
   const sendMessage = async (text) => {
     const userText = (text || input).trim();
     if (!userText || loading) return;
+    hasInteracted.current = true;
     setInput("");
     setShowSuggestions(false);
     setMessages((prev) => [...prev, { role: "user", text: userText }]);
@@ -926,6 +980,32 @@ function Upload({ onAnalyze }) {
   );
 }
 
+// ─── RACE BAR ────────────────────────────────────────────────────
+function RaceBar({ name, value, color, delay = 0, isWinner = false }) {
+  const [width, setWidth] = useState(0);
+
+  useEffect(() => {
+    const t = setTimeout(() => setWidth(value * 10), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+
+  return (
+    <div className="bar-row">
+      <span className="bar-name">{name}</span>
+      <div className="race-track">
+        <div className="race-gate" />
+        <div className="race-fill" style={{ width: `${width}%`, background: color }}>
+          <span className="race-horse">🐎</span>
+        </div>
+        <div className="race-finish" />
+      </div>
+      <span className="bar-val">
+        {value}{isWinner && <span className="race-winner-flag"> ★</span>}
+      </span>
+    </div>
+  );
+}
+
 // ─── RESULTS PAGE ────────────────────────────────────────────────
 function Results({ data, professor, course, hasSyllabus, profile, onBack }) {
   const score = data.workload_index;
@@ -955,6 +1035,8 @@ function Results({ data, professor, course, hasSyllabus, profile, onBack }) {
   const barColors = { syllabus: "#c9912a", professor: "#8b6914", grades: "#4a7c3f", reddit: "#6b4c2a" };
   const gradeColors = { A: "#4a7c3f", B: "#c9912a", C: "#8b6914", D: "#6b3030", F: "#8b2020" };
   const maxGrade = Math.max(...Object.values(data.grade_distribution));
+  const maxBreakdown = Math.max(...Object.values(data.breakdown));
+  const raceDelays = { syllabus: 0, professor: 180, grades: 360, reddit: 540 };
 
   return (
     <div className="results-wrap">
@@ -977,11 +1059,14 @@ function Results({ data, professor, course, hasSyllabus, profile, onBack }) {
           <p className="score-desc">{desc}</p>
           <div className="bar-rows">
             {Object.entries(data.breakdown).map(([key, val]) => (
-              <div key={key} className="bar-row">
-                <span className="bar-name">{key}</span>
-                <div className="bar-track"><div className="bar-fill" style={{ width: `${val * 10}%`, background: barColors[key] }} /></div>
-                <span className="bar-val">{val}</span>
-              </div>
+              <RaceBar
+                key={key}
+                name={key}
+                value={val}
+                color={barColors[key]}
+                delay={raceDelays[key] ?? 0}
+                isWinner={val === maxBreakdown}
+              />
             ))}
           </div>
         </div>
