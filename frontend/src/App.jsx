@@ -463,6 +463,24 @@ const styles = `
   .flag-row:last-child { border-bottom: none; }
   .flag-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--danger); flex-shrink: 0; box-shadow: 0 0 4px var(--danger); }
 
+  .trail-dispatch-header {
+    margin: 0.75rem 0 0.5rem; border-top: 1px solid var(--border); padding-top: 0.75rem;
+    font-family: 'Rye', cursive; font-size: 0.58rem; color: var(--gold);
+    letter-spacing: 0.14em; text-transform: uppercase;
+  }
+  .dispatch-row {
+    padding: 0.45rem 0; border-bottom: 1px solid rgba(92,61,26,0.3);
+    font-size: 0.78rem; line-height: 1.4;
+  }
+  .dispatch-row:last-child { border-bottom: none; }
+  .dispatch-title {
+    display: block; color: var(--cream); text-decoration: none;
+    margin-bottom: 0.15rem; font-family: 'Special Elite', cursive;
+    transition: color 0.15s;
+  }
+  .dispatch-title:hover { color: var(--gold2); }
+  .dispatch-meta { font-size: 0.62rem; color: var(--muted); }
+
   .grade-card { background: var(--surface); border: 2px solid var(--border); border-radius: 3px; padding: 1.5rem; margin-bottom: 1.25rem; box-shadow: 3px 3px 0 #000; }
   .grade-cols { display: flex; align-items: flex-end; gap: 0.75rem; height: 110px; margin-top: 1rem; }
   .grade-col { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; flex: 1; }
@@ -479,8 +497,33 @@ const styles = `
 
   .results-chatbot { max-width: 900px; margin: 0 auto; }
 
+  /* ── COMPARE PAGE ── */
+  .compare-wrap { max-width: 1100px; margin: 0 auto; padding: 3rem 2rem 6rem; }
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem; }
+  .compare-col { display: flex; flex-direction: column; gap: 1rem; }
+  .compare-header {
+    background: var(--surface2); border: 2px solid var(--border);
+    border-radius: 3px; padding: 1.25rem 1.5rem;
+    box-shadow: 3px 3px 0 #000; text-align: center;
+  }
+  .compare-winner { border-color: var(--gold) !important; box-shadow: 3px 3px 0 #000, 0 0 20px rgba(201,145,42,0.2) !important; }
+  .compare-score-big { font-family: 'Rye', cursive; font-size: 3rem; color: var(--gold2); text-shadow: 2px 2px 0 #000; line-height: 1; }
+  .compare-label { font-family: 'Special Elite', cursive; font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-top: 0.25rem; }
+  .compare-card { background: var(--surface); border: 2px solid var(--border); border-radius: 3px; padding: 1.25rem 1.5rem; box-shadow: 3px 3px 0 #000; }
+  .compare-card-title { font-family: 'Rye', cursive; font-size: 0.62rem; color: var(--gold); text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 0.85rem; }
+  .compare-stat-row { display: flex; justify-content: space-between; align-items: center; padding: 0.35rem 0; border-bottom: 1px solid rgba(92,61,26,0.3); font-size: 0.82rem; }
+  .compare-stat-row:last-child { border-bottom: none; }
+  .compare-stat-key { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  .compare-stat-val { font-family: 'Rye', cursive; font-size: 0.95rem; color: var(--cream); }
+  .compare-better { color: #7dc46f !important; }
+  .compare-worse  { color: #e05050 !important; }
+  .compare-mini-grades { display: flex; gap: 0.4rem; align-items: flex-end; height: 55px; margin-top: 0.75rem; }
+  .compare-grade-col { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; flex: 1; }
+  .compare-grade-bar { width: 100%; border-radius: 2px 2px 0 0; }
+  .compare-grade-letter { font-family: 'Rye', cursive; font-size: 0.6rem; color: var(--muted); }
+
   @media (max-width: 640px) {
-    .grid2, .input-row { grid-template-columns: 1fr; }
+    .grid2, .input-row, .compare-grid { grid-template-columns: 1fr; }
     .hero-score { flex-direction: column; gap: 1.5rem; }
     .sum-grid { grid-template-columns: repeat(2,1fr); }
     .stats-strip { gap: 2rem; padding: 1.5rem; }
@@ -666,8 +709,7 @@ function Upload({ onAnalyze }) {
   };
 
   const handleSubmit = async () => {
-    if (!syllabusText && !fileName) { alert("Whoa there — drop in a syllabus first, pardner."); return; }
-    if (!professor) { alert("We need a name to wrangle, partner. Enter a professor."); return; }
+    if (!professor.trim()) { alert("We need a name to wrangle, partner. Enter a professor."); return; }
     setLoading(true);
     
     try {
@@ -688,7 +730,7 @@ function Upload({ onAnalyze }) {
       
       const result = await response.json();
       setLoading(false);
-      onAnalyze({ syllabusText, professor, course, result });
+      onAnalyze({ syllabusText, professor, course, result, hasSyllabus: !!syllabusText.trim() });
     } catch (error) {
       console.error("Analysis error:", error);
       setLoading(false);
@@ -699,10 +741,10 @@ function Upload({ onAnalyze }) {
   return (
     <div className="page-wrap">
       <h2 className="page-title">Scout the Trail</h2>
-      <p className="page-sub">Drop in your syllabus scroll and we'll tell you what you're ridin' into.</p>
+      <p className="page-sub">Got a syllabus? Drop it in for the full roundup. No syllabus? Just enter the professor — we'll still pull RMP, Reddit, and grade data.</p>
 
       <div className="card">
-        <span className="card-label">01 — The Syllabus Scroll</span>
+        <span className="card-label">01 — Syllabus Scroll <span style={{color:"var(--muted)",fontFamily:"'Special Elite',cursive",fontSize:"0.68rem",letterSpacing:"0.05em",textTransform:"none"}}>(optional — adds deeper analysis)</span></span>
         <div
           className={`drop-zone ${dragging ? "active" : ""}`}
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
@@ -736,7 +778,7 @@ function Upload({ onAnalyze }) {
       </div>
 
       <button className="analyze-btn" onClick={handleSubmit} disabled={loading}>
-        {loading ? "⏳ Scoutin' the trail..." : "⚑ Get the Roundup Report"}
+        {loading ? "⏳ Scoutin' the trail..." : syllabusText ? "⚑ Get the Full Roundup" : "⚑ Search This Professor"}
       </button>
       {loading && <div className="loading-bar"><div className="loading-fill" /></div>}
     </div>
@@ -744,7 +786,7 @@ function Upload({ onAnalyze }) {
 }
 
 // ─── RESULTS PAGE ────────────────────────────────────────────────
-function Results({ data, professor, course, onBack }) {
+function Results({ data, professor, course, hasSyllabus, onBack }) {
   const score = data.workload_index;
   const label = score >= 8 ? "Grueling Cattle Drive" : score >= 6 ? "Rough Trail" : score >= 4 ? "Moderate Ride" : "Easy Pasture";
 
@@ -817,12 +859,48 @@ function Results({ data, professor, course, onBack }) {
         </div>
         <div className="flags-card">
           <div className="flags-title">⚠ Wanted Posters</div>
-          {data.red_flags.map((f, i) => <div key={i} className="flag-row"><span className="flag-dot" />{f}</div>)}
+          {data.red_flags && data.red_flags.length > 0
+            ? data.red_flags.map((f, i) => (
+                <div key={i} className="flag-row">
+                  <span className="flag-dot" />
+                  {f}
+                  {data.rmp_red_flags && data.rmp_red_flags.includes(f) && (
+                    <span style={{marginLeft:"auto",fontSize:"0.6rem",color:"var(--muted)",flexShrink:0}}>RMP</span>
+                  )}
+                </div>
+              ))
+            : <div className="flag-row" style={{color:"var(--muted)",fontStyle:"italic"}}>No red flags found</div>
+          }
+          {data.reddit_posts && data.reddit_posts.length > 0 && (
+            <>
+              <div className="trail-dispatch-header">📡 Trail Dispatches</div>
+              {data.reddit_posts.slice(0, 4).map((post, i) => (
+                <div key={i} className="dispatch-row">
+                  <a
+                    className="dispatch-title"
+                    href={post.url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {post.title.length > 68 ? post.title.slice(0, 68) + "…" : post.title}
+                  </a>
+                  <span className="dispatch-meta">
+                    {post.subreddit ? `r/${post.subreddit}` : "Reddit"} · ▲ {post.score}
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       </div>
 
       <div className="grade-card">
-        <div className="card-title">📊 Historical Grade Trail</div>
+        <div className="card-title">
+          📊 Historical Grade Trail
+          <span style={{float:"right",fontSize:"0.6rem",color:"var(--muted)",fontFamily:"'Special Elite',cursive",fontWeight:"normal",letterSpacing:"0.05em"}}>
+            Source: {data.grade_source || "RateMyProfessors"}
+          </span>
+        </div>
         <div className="grade-cols">
           {Object.entries(data.grade_distribution).map(([g, pct]) => (
             <div key={g} className="grade-col">
@@ -834,18 +912,33 @@ function Results({ data, professor, course, onBack }) {
         </div>
       </div>
 
-      <div className="summary-card">
-        <div className="card-title">📜 Syllabus Scouting Report</div>
-        <div className="sum-grid">
-          <div className="sum-item"><span className="sum-val">{data.syllabus_summary.num_assignments}</span><span className="sum-key">Assignments</span></div>
-          <div className="sum-item"><span className="sum-val">{data.syllabus_summary.num_exams}</span><span className="sum-key">Exams</span></div>
-          <div className="sum-item"><span className="sum-val">{data.syllabus_summary.weekly_reading_hours}h</span><span className="sum-key">Hrs/Week</span></div>
-          <div className="sum-item"><span className="sum-val" style={{color: data.syllabus_summary.late_policy_strict ? "#e05050" : "#7dc46f"}}>{data.syllabus_summary.late_policy_strict ? "Strict" : "Flexible"}</span><span className="sum-key">Late Policy</span></div>
-          <div className="sum-item"><span className="sum-val" style={{color: data.syllabus_summary.attendance_mandatory ? "#e05050" : "#7dc46f"}}>{data.syllabus_summary.attendance_mandatory ? "Required" : "Optional"}</span><span className="sum-key">Attendance</span></div>
-          <div className="sum-item"><span className="sum-val" style={{color: data.syllabus_summary.has_group_project ? "#c9912a" : "#7dc46f"}}>{data.syllabus_summary.has_group_project ? "Yep" : "Nope"}</span><span className="sum-key">Group Project</span></div>
+      {hasSyllabus ? (
+        <div className="summary-card">
+          <div className="card-title">📜 Syllabus Scouting Report</div>
+          <div className="sum-grid">
+            <div className="sum-item"><span className="sum-val">{data.syllabus_summary.num_assignments}</span><span className="sum-key">Assignments</span></div>
+            <div className="sum-item"><span className="sum-val">{data.syllabus_summary.num_exams}</span><span className="sum-key">Exams</span></div>
+            <div className="sum-item"><span className="sum-val">{data.syllabus_summary.weekly_reading_hours}h</span><span className="sum-key">Hrs/Week</span></div>
+            <div className="sum-item"><span className="sum-val" style={{color: data.syllabus_summary.late_policy_strict ? "#e05050" : "#7dc46f"}}>{data.syllabus_summary.late_policy_strict ? "Strict" : "Flexible"}</span><span className="sum-key">Late Policy</span></div>
+            <div className="sum-item"><span className="sum-val" style={{color: data.syllabus_summary.attendance_mandatory ? "#e05050" : "#7dc46f"}}>{data.syllabus_summary.attendance_mandatory ? "Required" : "Optional"}</span><span className="sum-key">Attendance</span></div>
+            <div className="sum-item"><span className="sum-val" style={{color: data.syllabus_summary.has_group_project ? "#c9912a" : "#7dc46f"}}>{data.syllabus_summary.has_group_project ? "Yep" : "Nope"}</span><span className="sum-key">Group Project</span></div>
+          </div>
+          <div className="reddit-block">"{data.reddit_summary}"</div>
         </div>
-        <div className="reddit-block">"{data.reddit_summary}"</div>
-      </div>
+      ) : (
+        <div className="summary-card" style={{textAlign:"center",padding:"2rem"}}>
+          <div className="card-title">📜 Syllabus Scouting Report</div>
+          <p style={{color:"var(--muted)",fontStyle:"italic",fontSize:"0.88rem",marginBottom:"1rem",fontFamily:"'Playfair Display',serif"}}>
+            No syllabus was provided — workload score is based on RMP data alone.
+          </p>
+          <div className="reddit-block">"{data.reddit_summary}"</div>
+          <div style={{marginTop:"1.25rem"}}>
+            <button className="btn-ghost" onClick={onBack} style={{fontSize:"0.78rem",padding:"0.55rem 1.25rem"}}>
+              + Add a Syllabus for Deeper Analysis
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="rope-divider">Ask the Frontier Advisor</div>
       <div className="results-chatbot">
@@ -855,10 +948,186 @@ function Results({ data, professor, course, onBack }) {
   );
 }
 
+// ─── COMPARE SETUP PAGE ──────────────────────────────────────────
+function CompareSetup({ onCompare }) {
+  const [course, setCourse] = useState("");
+  const [nameA, setNameA] = useState("");
+  const [syllabusA, setSyllabusA] = useState("");
+  const [nameB, setNameB] = useState("");
+  const [syllabusB, setSyllabusB] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleFile = (setter) => (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setter(ev.target.result);
+    reader.readAsText(file);
+  };
+
+  const handleSubmit = async () => {
+    if (!nameA.trim() || !nameB.trim()) { alert("Enter both professor names, partner."); return; }
+    if (!course.trim()) { alert("Enter the course code so we can compare apples to apples."); return; }
+    setLoading(true);
+    try {
+      const res = await fetch("http://localhost:8000/compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          course_code: course,
+          prof_a: { professor_name: nameA, syllabus_text: syllabusA },
+          prof_b: { professor_name: nameB, syllabus_text: syllabusB },
+        }),
+      });
+      if (!res.ok) throw new Error("Compare failed");
+      const data = await res.json();
+      onCompare(data);
+    } catch (err) {
+      alert("Ran into trouble on the trail, partner. Make sure the backend is running.");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="page-wrap">
+      <h2 className="page-title">Head-to-Head Showdown</h2>
+      <p className="page-sub">Same course, two sheriffs — who runs the easier trail? Add syllabi for the deepest comparison.</p>
+
+      <div className="card">
+        <span className="card-label">Course Code</span>
+        <input type="text" placeholder="e.g. CS 450" value={course} onChange={(e) => setCourse(e.target.value)} />
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1.25rem"}}>
+        {[
+          { label: "Sheriff A", name: nameA, setName: setNameA, syllabus: syllabusA, setSyllabus: setSyllabusA },
+          { label: "Sheriff B", name: nameB, setName: setNameB, syllabus: syllabusB, setSyllabus: setSyllabusB },
+        ].map(({ label, name, setName, setSyllabus }) => (
+          <div key={label} className="card">
+            <span className="card-label">{label}</span>
+            <label className="input-label">Professor Name</label>
+            <input type="text" placeholder="e.g. John Smith" value={name} onChange={(e) => setName(e.target.value)} style={{marginBottom:"1rem"}} />
+            <label className="input-label">Syllabus (optional)</label>
+            <input type="file" accept=".pdf,.txt,.doc,.docx" onChange={handleFile(setSyllabus)}
+              style={{color:"var(--tan)",fontSize:"0.78rem",display:"block",marginTop:"0.25rem"}} />
+          </div>
+        ))}
+      </div>
+
+      <button className="analyze-btn" onClick={handleSubmit} disabled={loading}>
+        {loading ? "⏳ Runnin' the showdown..." : "⚑ Start the Showdown"}
+      </button>
+      {loading && <div className="loading-bar"><div className="loading-fill" /></div>}
+    </div>
+  );
+}
+
+// ─── COMPARE RESULTS PAGE ─────────────────────────────────────────
+function CompareResults({ data, onBack }) {
+  const { course_code, prof_a, prof_b } = data;
+  const gradeColors = { A: "#4a7c3f", B: "#c9912a", C: "#8b6914", D: "#6b3030", F: "#8b2020" };
+
+  const winnerA = prof_a.workload_index <= prof_b.workload_index;
+
+  const statRows = [
+    { key: "Workload",      a: `${prof_a.workload_index}/10`, b: `${prof_b.workload_index}/10`, aWins: prof_a.workload_index < prof_b.workload_index },
+    { key: "RMP Rating",   a: `${prof_a.professor.rating}/5`, b: `${prof_b.professor.rating}/5`, aWins: prof_a.professor.rating > prof_b.professor.rating },
+    { key: "Difficulty",   a: `${prof_a.professor.difficulty}/5`, b: `${prof_b.professor.difficulty}/5`, aWins: prof_a.professor.difficulty < prof_b.professor.difficulty },
+    { key: "Ride Again",   a: `${prof_a.professor.would_take_again}%`, b: `${prof_b.professor.would_take_again}%`, aWins: prof_a.professor.would_take_again > prof_b.professor.would_take_again },
+    { key: "Grade A%",     a: `${prof_a.grade_distribution.A}%`, b: `${prof_b.grade_distribution.A}%`, aWins: prof_a.grade_distribution.A > prof_b.grade_distribution.A },
+  ];
+
+  const MiniGrades = ({ dist }) => {
+    const max = Math.max(...Object.values(dist));
+    return (
+      <div className="compare-mini-grades">
+        {Object.entries(dist).map(([g, pct]) => (
+          <div key={g} className="compare-grade-col">
+            <div className="compare-grade-bar" style={{ height: `${(pct / max) * 38}px`, background: gradeColors[g] }} />
+            <span className="compare-grade-letter">{g}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const ProfCol = ({ p, isWinner }) => (
+    <div className="compare-col">
+      <div className={`compare-header ${isWinner ? "compare-winner" : ""}`}>
+        <div className="compare-score-big">{p.workload_index}</div>
+        <div className="compare-label">workload / 10</div>
+        <div style={{fontFamily:"'Rye',cursive",fontSize:"1rem",color:"var(--cream)",marginTop:"0.5rem"}}>{p.professor.name}</div>
+        <div style={{fontSize:"0.68rem",color:"var(--gold)",textTransform:"uppercase",letterSpacing:"0.08em"}}>{p.professor.department}</div>
+        {isWinner && <div style={{marginTop:"0.5rem",fontSize:"0.7rem",color:"var(--gold2)",letterSpacing:"0.1em"}}>★ EASIER RIDE ★</div>}
+      </div>
+
+      <div className="compare-card">
+        <div className="compare-card-title">Stats</div>
+        {statRows.map(({ key, a, b, aWins }, i) => {
+          const val = p === prof_a ? a : b;
+          const wins = p === prof_a ? aWins : !aWins;
+          return (
+            <div key={i} className="compare-stat-row">
+              <span className="compare-stat-key">{key}</span>
+              <span className={`compare-stat-val ${wins ? "compare-better" : "compare-worse"}`}>{val}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="compare-card">
+        <div className="compare-card-title">Grade Distribution <span style={{float:"right",fontSize:"0.55rem",color:"var(--muted)"}}>{p.grade_source}</span></div>
+        <MiniGrades dist={p.grade_distribution} />
+      </div>
+
+      <div className="compare-card">
+        <div className="compare-card-title">Red Flags</div>
+        {p.red_flags.length > 0
+          ? p.red_flags.map((f, i) => <div key={i} className="flag-row"><span className="flag-dot" />{f}</div>)
+          : <div style={{color:"var(--muted)",fontStyle:"italic",fontSize:"0.82rem"}}>No red flags found</div>
+        }
+      </div>
+
+      {p.has_syllabus && (
+        <div className="compare-card">
+          <div className="compare-card-title">Syllabus Breakdown</div>
+          {[
+            ["Assignments", p.syllabus_summary.num_assignments],
+            ["Exams", p.syllabus_summary.num_exams],
+            ["Hrs/Week", `${p.syllabus_summary.weekly_reading_hours}h`],
+            ["Late Policy", p.syllabus_summary.late_policy_strict ? "Strict" : "Flexible"],
+            ["Attendance", p.syllabus_summary.attendance_mandatory ? "Required" : "Optional"],
+            ["Group Project", p.syllabus_summary.has_group_project ? "Yes" : "No"],
+          ].map(([k, v]) => (
+            <div key={k} className="compare-stat-row">
+              <span className="compare-stat-key">{k}</span>
+              <span className="compare-stat-val" style={{fontSize:"0.82rem"}}>{v}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="compare-wrap">
+      <button className="back-btn" onClick={onBack}>← Ride Back</button>
+      <h2 className="results-title">{course_code} — Head-to-Head</h2>
+      <p className="results-sub">{prof_a.professor.name} vs {prof_b.professor.name}</p>
+
+      <div className="compare-grid">
+        <ProfCol p={prof_a} isWinner={winnerA} />
+        <ProfCol p={prof_b} isWinner={!winnerA} />
+      </div>
+    </div>
+  );
+}
+
 // ─── ROOT ────────────────────────────────────────────────────────
 export default function App() {
   const [page, setPage] = useState("landing");
   const [formData, setFormData] = useState(null);
+  const [compareData, setCompareData] = useState(null);
 
   return (
     <>
@@ -866,19 +1135,31 @@ export default function App() {
       <div className="app">
         <nav className="nav">
           <div className="logo" onClick={() => setPage("landing")}>⭐ RateMyRodeo</div>
-          {page !== "upload" && (
-            <button className="nav-btn" onClick={() => setPage("upload")}>Scout a Course</button>
-          )}
+          <div style={{ display: "flex", gap: "0.6rem" }}>
+            {page !== "upload" && (
+              <button className="nav-btn" onClick={() => setPage("upload")}>Scout a Course</button>
+            )}
+            {page !== "compare-setup" && (
+              <button className="nav-btn" onClick={() => setPage("compare-setup")}>⚔ Compare</button>
+            )}
+          </div>
         </nav>
-        {page === "landing" && <Landing onStart={() => setPage("upload")} />}
-        {page === "upload" && <Upload onAnalyze={(d) => { setFormData(d); setPage("results"); }} />}
-        {page === "results" && (
+        {page === "landing"       && <Landing onStart={() => setPage("upload")} />}
+        {page === "upload"        && <Upload onAnalyze={(d) => { setFormData(d); setPage("results"); }} />}
+        {page === "results"       && (
           <Results
             data={formData?.result || MOCK_RESULT}
             professor={formData?.professor}
             course={formData?.course}
+            hasSyllabus={formData?.hasSyllabus ?? true}
             onBack={() => setPage("upload")}
           />
+        )}
+        {page === "compare-setup" && (
+          <CompareSetup onCompare={(d) => { setCompareData(d); setPage("compare-results"); }} />
+        )}
+        {page === "compare-results" && (
+          <CompareResults data={compareData} onBack={() => setPage("compare-setup")} />
         )}
       </div>
     </>
